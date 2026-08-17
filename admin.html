@@ -16,11 +16,37 @@
   .actions { display: flex; gap: 8px; }
   .btn-delete { background: #5a2020; color: #ff8585; border: 1px solid #7a2828; }
   .btn-delete:hover { background: #7a2828; }
+  
+  /* Pantalla de bloqueo */
+  #loginOverlay {
+    position: fixed; inset: 0; background: #0c1120;
+    display: flex; align-items: center; justify-content: center; z-index: 999;
+  }
+  .login-card {
+    background: #131b2e; border: 1px solid #3a4568; border-radius: 12px;
+    padding: 30px 24px; width: 90%; max-width: 360px; text-align: center;
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="eyebrow">Solo para ti — no compartas esta URL</div>
+
+<!-- Pantalla de bloqueo por PIN -->
+<div id="loginOverlay">
+  <div class="login-card">
+    <div class="eyebrow">Panel Administrativo</div>
+    <h2 style="color:#fff; margin: 10px 0 20px;">Ingresa el PIN</h2>
+    <input type="password" id="pinInput" placeholder="Contraseña de acceso" style="width:100%; box-sizing:border-box; margin-bottom:12px; text-align:center;">
+    <button class="btn primary" id="loginBtn" style="width:100%;">Entrar</button>
+    <p id="loginError" style="color:#ff6b6b; font-size:13px; margin:12px 0 0; display:none;">PIN incorrecto.</p>
+  </div>
+</div>
+
+<!-- Panel de Administración -->
+<div class="wrap" id="adminWrap" style="display:none;">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="eyebrow">Panel de Control</div>
+    <button class="btn small" id="logoutBtn" style="background:#2a3656;">Cerrar sesión</button>
+  </div>
   <h1>Generador de piezas</h1>
   <p class="sub">Genera una pieza por integrante. Descárgala y envíasela por su cuenta.</p>
 
@@ -32,26 +58,59 @@
 
   <div class="section-title">Piezas generadas</div>
   <div class="pieces" id="pieces">
-    <div class="empty" id="statusMsg">Iniciando conexión...</div>
+    <div class="empty" id="statusMsg">Cargando piezas...</div>
   </div>
 
   <footer><a class="plain" href="index.html">Ir a la página de verificación</a></footer>
 </div>
 
 <script>
+// CONTRASEÑA DE ACCESO AL PANEL (Cámbiala por la que prefieras)
+const ADMIN_PIN = 'Sinergya';
+
+const loginOverlay = document.getElementById('loginOverlay');
+const adminWrap = document.getElementById('adminWrap');
+const pinInput = document.getElementById('pinInput');
+const loginBtn = document.getElementById('loginBtn');
+const loginError = document.getElementById('loginError');
+const logoutBtn = document.getElementById('logoutBtn');
+
+// 1. Control de autenticación
+function checkAuth() {
+  if (sessionStorage.getItem('admin_logged') === 'true') {
+    loginOverlay.style.display = 'none';
+    adminWrap.style.display = 'block';
+    initAdmin();
+  }
+}
+
+loginBtn.onclick = () => {
+  if (pinInput.value === ADMIN_PIN) {
+    sessionStorage.setItem('admin_logged', 'true');
+    loginOverlay.style.display = 'none';
+    adminWrap.style.display = 'block';
+    initAdmin();
+  } else {
+    loginError.style.display = 'block';
+    pinInput.value = '';
+    pinInput.focus();
+  }
+};
+
+pinInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') loginBtn.click();
+});
+
+logoutBtn.onclick = () => {
+  sessionStorage.removeItem('admin_logged');
+  location.reload();
+};
+
+// 2. Conexión y lógica del panel
 const SUPABASE_URL = 'https://ngukwfgiyrsxloicixhx.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ndWt3ZmdpeXJzeGxvaWNpeGh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTQwMTcsImV4cCI6MjEwMjUzMDAxN30.rDnMh6dEPirrm8TVQLaii9Nunr1xVYD9jTQ8Z60MDBs';
 
-const piecesEl = document.getElementById('pieces');
-const nameInput = document.getElementById('nameInput');
-const genBtn = document.getElementById('genBtn');
-
 let supabaseClient = null;
-try {
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-} catch (e) {
-  piecesEl.innerHTML = '<div style="color:red">Error al cargar cliente Supabase</div>';
-}
 
 function gearPath(cx, cy, rOuter, rInner, teeth) {
   let d = '';
@@ -106,6 +165,10 @@ function drawGearPiece(canvas, token, label) {
   }, 50);
 }
 
+const piecesEl = document.getElementById('pieces');
+const nameInput = document.getElementById('nameInput');
+const genBtn = document.getElementById('genBtn');
+
 async function renderPieces() {
   if (!supabaseClient) return;
   piecesEl.innerHTML = '<div class="empty">Cargando piezas...</div>';
@@ -141,7 +204,7 @@ async function renderPieces() {
     const actions = document.createElement('div');
     actions.className = 'actions';
 
-    // Botón Descargar
+    // Descargar
     const dl = document.createElement('button');
     dl.className = 'btn small';
     dl.textContent = 'Descargar';
@@ -166,24 +229,18 @@ async function renderPieces() {
     };
     actions.appendChild(dl);
 
-    // Botón Eliminar
+    // Eliminar
     const delBtn = document.createElement('button');
     delBtn.className = 'btn small btn-delete';
     delBtn.textContent = 'Eliminar';
     delBtn.onclick = async () => {
-      const confirmacion = confirm(`¿Seguro que deseas eliminar la pieza de "${entry.name}"?`);
-      if (!confirmacion) return;
-
+      if (!confirm(`¿Eliminar la pieza de "${entry.name}"?`)) return;
       delBtn.disabled = true;
-      delBtn.textContent = 'Borrando...';
+      delBtn.textContent = '...';
 
-      const { error: delErr } = await supabaseClient
-        .from('pieces')
-        .delete()
-        .eq('token', entry.token);
-
+      const { error: delErr } = await supabaseClient.from('pieces').delete().eq('token', entry.token);
       if (delErr) {
-        alert('Error al eliminar: ' + delErr.message);
+        alert('Error: ' + delErr.message);
         delBtn.disabled = false;
         delBtn.textContent = 'Eliminar';
       } else {
@@ -197,28 +254,41 @@ async function renderPieces() {
   });
 }
 
-genBtn.addEventListener('click', async () => {
-  const name = nameInput.value.trim();
-  if (!name) return alert('Por favor escribe un nombre');
-  
-  genBtn.disabled = true;
-  genBtn.textContent = 'Generando...';
-  
-  const token = 'PZ-' + Math.random().toString(36).substring(2, 9).toUpperCase();
-  const { error } = await supabaseClient.from('pieces').insert({ token, name });
-  
-  if (error) {
-    alert('Error al guardar: ' + error.message);
-  } else {
-    nameInput.value = '';
-    await renderPieces();
+function initAdmin() {
+  if (!supabaseClient) {
+    try {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      piecesEl.innerHTML = '<div style="color:red">Error al inicializar Supabase.</div>';
+    }
   }
-  
-  genBtn.disabled = false;
-  genBtn.textContent = 'Generar pieza';
-});
 
-renderPieces();
+  genBtn.onclick = async () => {
+    const name = nameInput.value.trim();
+    if (!name) return alert('Escribe un nombre');
+    
+    genBtn.disabled = true;
+    genBtn.textContent = 'Generando...';
+    
+    const token = 'PZ-' + Math.random().toString(36).substring(2, 9).toUpperCase();
+    const { error } = await supabaseClient.from('pieces').insert({ token, name });
+    
+    if (error) {
+      alert('Error al guardar: ' + error.message);
+    } else {
+      nameInput.value = '';
+      await renderPieces();
+    }
+    
+    genBtn.disabled = false;
+    genBtn.textContent = 'Generar pieza';
+  };
+
+  renderPieces();
+}
+
+// Iniciar verificación
+checkAuth();
 </script>
 </body>
 </html>
