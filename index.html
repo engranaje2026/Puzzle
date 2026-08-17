@@ -5,8 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Acceso — Planilla Sinergia</title>
 <link rel="stylesheet" href="styles.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .drop {
+    border: 2px dashed #3a4568;
+    border-radius: 12px;
+    padding: 35px 20px;
+    text-align: center;
+    background: #131b2e;
+    cursor: pointer;
+    margin: 20px 0;
+  }
+  .result {
+    display: none;
+    padding: 16px;
+    border-radius: 8px;
+    margin-top: 20px;
+    text-align: center;
+  }
+  .result.show { display: block; }
+  .result.ok { background: #142918; border: 1px solid #205a28; color: #51cf66; }
+  .result.err { background: #2a1515; border: 1px solid #5a2020; color: #ff6b6b; }
+  .result.loading { background: #1a2440; border: 1px solid #3a4568; color: #c6a15b; }
+  .result h2 { margin: 0 0 8px; font-size: 18px; color: inherit; }
+  .result p { margin: 0; font-size: 14px; color: #ddd; }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -15,13 +39,12 @@
   <p class="sub">Cada integrante recibió una pieza única. Súbela aquí para entrar al espacio del equipo.</p>
 
   <div class="drop" id="drop">
-    <p class="big">Arrastra tu pieza aquí</p>
-    <p>o haz clic para seleccionar el archivo</p>
-    <input type="file" id="fileInput" accept="image/*">
+    <p class="big" style="font-weight:600; color:#fff; margin:0 0 6px;">Toca aquí para seleccionar tu pieza</p>
+    <p style="color:#8a99ad; margin:0; font-size:13px;">Formatos: PNG o JPG</p>
+    <input type="file" id="fileInput" accept="image/*" style="display:none;">
   </div>
 
   <div class="result" id="result">
-    <div class="result-tag" id="resultTag"></div>
     <h2 id="resultTitle"></h2>
     <p id="resultBody"></p>
   </div>
@@ -39,57 +62,63 @@ const drop = document.getElementById('drop');
 const fileInput = document.getElementById('fileInput');
 
 drop.addEventListener('click', () => fileInput.click());
-['dragover'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.add('drag'); }));
-['dragleave', 'drop'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.remove('drag'); }));
 
-drop.addEventListener('drop', e => {
-  if (e.dataTransfer.files.length) handleUploadedFile(e.dataTransfer.files[0], onToken, onFail);
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files && e.target.files.length > 0) {
+    handleUploadedFile(e.target.files[0]);
+  }
 });
 
-fileInput.addEventListener('change', e => {
-  if (e.target.files.length) handleUploadedFile(e.target.files[0], onToken, onFail);
-});
-
-function showResult({ok, title, body}) {
+function showResult(type, title, body) {
   const box = document.getElementById('result');
-  box.className = 'result show ' + (ok ? 'ok' : 'err');
-  document.getElementById('resultTag').textContent = ok ? 'Acceso concedido' : 'Acceso rechazado';
+  box.className = 'result show ' + type;
   document.getElementById('resultTitle').textContent = title;
   document.getElementById('resultBody').textContent = body;
 }
 
-function onFail() {
-  showResult({
-    ok: false, 
-    title: 'No se pudo leer la pieza', 
-    body: 'La imagen no contiene un código válido o la foto está borrosa.'
-  });
-}
-
-function handleUploadedFile(file, onTokenSuccess, onTokenFail) {
+function handleUploadedFile(file) {
+  showResult('loading', 'Analizando pieza...', 'Leyendo el código QR embebido en la imagen.');
+  
   const img = new Image();
   const reader = new FileReader();
-  reader.onload = () => {
+
+  reader.onload = (e) => {
     img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = img.width;
-      c.height = img.height;
-      const cx = c.getContext('2d');
-      cx.drawImage(img, 0, 0);
-      const data = cx.getImageData(0, 0, c.width, c.height);
-      const code = jsQR(data.data, c.width, c.height);
-      if (code && code.data) {
-        onTokenSuccess(code.data.trim());
-      } else {
-        onTokenFail();
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        if (typeof jsQR === 'undefined') {
+          showResult('err', 'Error interno', 'La librería de lectura QR no cargó correctamente.');
+          return;
+        }
+
+        const code = jsQR(imgData.data, canvas.width, canvas.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code && code.data) {
+          validateToken(code.data.trim());
+        } else {
+          showResult('err', 'No se pudo leer la pieza', 'Asegúrate de subir la imagen original PNG descargada del generador.');
+        }
+      } catch (err) {
+        showResult('err', 'Error al procesar', 'No se pudo decodificar el archivo.');
       }
     };
-    img.src = reader.result;
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
 
-async function onToken(token) {
+async function validateToken(token) {
+  showResult('loading', 'Validando con el servidor...', 'Verificando autenticidad del folio.');
+
   try {
     const { data, error } = await supabaseClient
       .from('pieces')
@@ -99,11 +128,11 @@ async function onToken(token) {
       .select();
 
     if (error) {
-      showResult({ ok: false, title: 'Error al validar', body: 'No se pudo consultar la base de datos: ' + error.message });
+      showResult('err', 'Error de conexión', error.message);
       return;
     }
 
-    if (!data || !data.length) {
+    if (!data || data.length === 0) {
       const { data: existing } = await supabaseClient
         .from('pieces')
         .select('*')
@@ -111,25 +140,22 @@ async function onToken(token) {
         .maybeSingle();
 
       if (!existing) {
-        showResult({ ok: false, title: 'Pieza no reconocida', body: 'El código leído no corresponde a ninguna pieza emitida.' });
+        showResult('err', 'Pieza no reconocida', 'El código de esta pieza no está registrado en el sistema.');
       } else {
-        showResult({ 
-          ok: false, 
-          title: 'Esta pieza ya fue utilizada', 
-          body: 'Cada pieza da acceso una sola vez. El folio de ' + existing.name + ' ya fue canjeado.' 
-        });
+        showResult('err', 'Pieza ya utilizada', 'Esta pieza (' + existing.name + ') ya fue canjeada anteriormente.');
       }
       return;
     }
 
-    const integrante = data[0].name;
-    showResult({ ok: true, title: '¡Bienvenido, ' + integrante + '!', body: 'Redirigiendo a tu espacio…' });
+    const name = data[0].name;
+    showResult('ok', '¡Bienvenido/a, ' + name + '!', 'Acceso concedido. Redirigiendo...');
+    
     setTimeout(() => {
-      window.location.href = 'destino.html?nombre=' + encodeURIComponent(integrante);
+      window.location.href = 'destino.html?nombre=' + encodeURIComponent(name);
     }, 1000);
 
   } catch (err) {
-    showResult({ ok: false, title: 'Fallo de red', body: 'Hubo un problema al procesar la solicitud.' });
+    showResult('err', 'Error de red', 'No se pudo completar la verificación.');
   }
 }
 </script>
