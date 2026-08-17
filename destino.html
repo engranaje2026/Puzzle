@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bienvenido a — Sinergia</title>
+<title>Bienvenida — Planilla Sinergia</title>
 <link rel="stylesheet" href="styles.css">
 <style>
   .welcome-card {
@@ -35,7 +35,7 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="wrap" id="mainContent" style="display:none;">
   <div class="eyebrow">Acceso Confirmado</div>
   <h1>Engranaje Completo</h1>
 
@@ -44,8 +44,7 @@
     <p style="color: #8a99ad; margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">Bienvenido/a al equipo</p>
     <div class="highlight" id="userName">Integrante</div>
     <p class="desc">
-      Tu eres la pieza que hace falta en la maquinaria, bienvendo a SINERGIA <b> Nuestra siguiente reunion se llevará a cabo el jueves 20 de agosto de 2026
-      en Av heroico colegio militar 15 chamilpa, cuernavaca Morelos </b>.
+      Tu pieza ha sido validada con éxito y ensamblada a la maquinaria de <b>Planilla Sinergia</b>.
     </p>
   </div>
 
@@ -53,11 +52,18 @@
 </div>
 
 <script>
-  // Obtiene el nombre del integrante desde el parámetro URL ?nombre=...
-  const params = new URLSearchParams(window.location.search);
-  const name = params.get('nombre');
-  if (name) {
-    document.getElementById('userName').textContent = decodeURIComponent(name);
+  // 1. Verificar si el usuario pasó por la validación del QR
+  const isAuth = sessionStorage.getItem('sinergia_auth');
+  const userName = sessionStorage.getItem('sinergia_user');
+
+  if (!isAuth || !userName) {
+    // Si entró directo sin escanear, lo redirige al validador de inmediato
+    alert('Acceso no autorizado. Debes escanear tu pieza para ingresar.');
+    window.location.replace('index.html');
+  } else {
+    // Si está validado, mostramos el contenido y su nombre
+    document.getElementById('userName').textContent = userName;
+    document.getElementById('mainContent').style.display = 'block';
   }
 </script>
 </body>
