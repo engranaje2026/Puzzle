@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Acceso — Planilla Sinergia</title>
 <link rel="stylesheet" href="styles.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -30,23 +29,28 @@
   <footer>Cada pieza es válida una sola vez.</footer>
 </div>
 
-<script src="config.js"></script>
-<script src="engine.js"></script>
 <script>
+const SUPABASE_URL = 'https://ngukwfgiyrsxloicixhx.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ndWt3ZmdpeXJzeGxvaWNpeGh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTQwMTcsImV4cCI6MjEwMjUzMDAxN30.rDnMh6dEPirrm8TVQLaii9Nunr1xVYD9jTQ8Z60MDBs';
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('fileInput');
 
-drop.addEventListener('click', ()=> fileInput.click());
-['dragover'].forEach(evt=> drop.addEventListener(evt, e=>{ e.preventDefault(); drop.classList.add('drag'); }));
-['dragleave','drop'].forEach(evt=> drop.addEventListener(evt, e=>{ e.preventDefault(); drop.classList.remove('drag'); }));
-drop.addEventListener('drop', e=>{
-  if(e.dataTransfer.files.length) handleUploadedFile(e.dataTransfer.files[0], onToken, onFail);
-});
-fileInput.addEventListener('change', e=>{
-  if(e.target.files.length) handleUploadedFile(e.target.files[0], onToken, onFail);
+drop.addEventListener('click', () => fileInput.click());
+['dragover'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.add('drag'); }));
+['dragleave', 'drop'].forEach(evt => drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+
+drop.addEventListener('drop', e => {
+  if (e.dataTransfer.files.length) handleUploadedFile(e.dataTransfer.files[0], onToken, onFail);
 });
 
-function showResult({ok, title, body}){
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length) handleUploadedFile(e.target.files[0], onToken, onFail);
+});
+
+function showResult({ok, title, body}) {
   const box = document.getElementById('result');
   box.className = 'result show ' + (ok ? 'ok' : 'err');
   document.getElementById('resultTag').textContent = ok ? 'Acceso concedido' : 'Acceso rechazado';
@@ -54,26 +58,79 @@ function showResult({ok, title, body}){
   document.getElementById('resultBody').textContent = body;
 }
 
-function onFail(){
-  showResult({ok:false, title:'No se pudo leer la pieza', body:'La imagen no contiene un código válido o la foto está borrosa.'});
+function onFail() {
+  showResult({
+    ok: false, 
+    title: 'No se pudo leer la pieza', 
+    body: 'La imagen no contiene un código válido o la foto está borrosa.'
+  });
 }
 
-async function onToken(token){
-  const res = await redeemToken(token);
-  if(!res.ok){
-    if(res.reason === 'not_found'){
-      showResult({ok:false, title:'Pieza no reconocida', body:'El código leído no corresponde a ninguna pieza emitida.'});
-    } else if(res.reason === 'used'){
-      showResult({ok:false, title:'Esta pieza ya fue utilizada', body:'Cada pieza da acceso una sola vez. El folio de ' + res.name + ' ya fue canjeado.'});
-    } else {
-      showResult({ok:false, title:'Error al validar', body:'No se pudo consultar la base. Intenta de nuevo.'});
+function handleUploadedFile(file, onTokenSuccess, onTokenFail) {
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = () => {
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const cx = c.getContext('2d');
+      cx.drawImage(img, 0, 0);
+      const data = cx.getImageData(0, 0, c.width, c.height);
+      const code = jsQR(data.data, c.width, c.height);
+      if (code && code.data) {
+        onTokenSuccess(code.data.trim());
+      } else {
+        onTokenFail();
+      }
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function onToken(token) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('pieces')
+      .update({ used: true, used_at: new Date().toISOString() })
+      .eq('token', token)
+      .eq('used', false)
+      .select();
+
+    if (error) {
+      showResult({ ok: false, title: 'Error al validar', body: 'No se pudo consultar la base de datos: ' + error.message });
+      return;
     }
-    return;
+
+    if (!data || !data.length) {
+      const { data: existing } = await supabaseClient
+        .from('pieces')
+        .select('*')
+        .eq('token', token)
+        .maybeSingle();
+
+      if (!existing) {
+        showResult({ ok: false, title: 'Pieza no reconocida', body: 'El código leído no corresponde a ninguna pieza emitida.' });
+      } else {
+        showResult({ 
+          ok: false, 
+          title: 'Esta pieza ya fue utilizada', 
+          body: 'Cada pieza da acceso una sola vez. El folio de ' + existing.name + ' ya fue canjeado.' 
+        });
+      }
+      return;
+    }
+
+    const integrante = data[0].name;
+    showResult({ ok: true, title: '¡Bienvenido, ' + integrante + '!', body: 'Redirigiendo a tu espacio…' });
+    setTimeout(() => {
+      window.location.href = 'destino.html?nombre=' + encodeURIComponent(integrante);
+    }, 1000);
+
+  } catch (err) {
+    showResult({ ok: false, title: 'Fallo de red', body: 'Hubo un problema al procesar la solicitud.' });
   }
-  showResult({ok:true, title:'¡Bienvenido, ' + res.name + '!', body:'Redirigiendo a tu perfil…'});
-  setTimeout(()=>{
-    window.location.href = 'destino.html?nombre=' + encodeURIComponent(res.name);
-  }, 900);
 }
 </script>
 </body>
