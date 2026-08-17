@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .empty { padding: 12px; color: #8a99ad; font-size: 14px; }
-  .piece-card { background: #131b2e; border: 1px solid #2a3656; border-radius: 8px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .piece-card { background: #131b2e; border: 1px solid #2a3656; border-radius: 8px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .piece-name { font-weight: 600; color: #fff; }
   .piece-status { font-size: 12px; color: #c6a15b; }
   .piece-status.used { color: #888; }
@@ -105,7 +105,7 @@ function drawGearPiece(canvas, token, label) {
 
 async function renderPieces() {
   if (!supabaseClient) return;
-  piecesEl.innerHTML = '<div class="empty">Cargando piezas desde base de datos...</div>';
+  piecesEl.innerHTML = '<div class="empty">Cargando piezas...</div>';
   
   const { data, error } = await supabaseClient
     .from('pieces')
@@ -135,15 +135,27 @@ async function renderPieces() {
     info.innerHTML = `<div class="piece-name">${entry.name}</div><div class="piece-status ${entry.used ? 'used' : ''}">${entry.used ? 'Ya utilizada' : 'Disponible'}</div>`;
     card.appendChild(info);
 
-    const dl = document.createElement('a');
+    const dl = document.createElement('button');
     dl.className = 'btn small';
     dl.textContent = 'Descargar';
-    dl.href = '#';
-    dl.onclick = (e) => {
-      e.preventDefault();
-      dl.href = canvas.toDataURL('image/png');
-      dl.download = entry.name.replace(/\s+/g, '-').toLowerCase() + '.png';
-      dl.click();
+    dl.onclick = () => {
+      canvas.toBlob((blob) => {
+        const fileName = entry.name.replace(/\s+/g, '-').toLowerCase() + '.png';
+        if (!blob) {
+          window.open(canvas.toDataURL('image/png'), '_blank');
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 1000);
+      }, 'image/png');
     };
     card.appendChild(dl);
 
