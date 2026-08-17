@@ -9,10 +9,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .empty { padding: 12px; color: #8a99ad; font-size: 14px; }
-  .piece-card { background: #131b2e; border: 1px solid #2a3656; border-radius: 8px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .piece-card { background: #131b2e; border: 1px solid #2a3656; border-radius: 8px; padding: 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .piece-name { font-weight: 600; color: #fff; }
   .piece-status { font-size: 12px; color: #c6a15b; }
   .piece-status.used { color: #888; }
+  .actions { display: flex; gap: 8px; }
+  .btn-delete { background: #5a2020; color: #ff8585; border: 1px solid #7a2828; }
+  .btn-delete:hover { background: #7a2828; }
 </style>
 </head>
 <body>
@@ -119,7 +122,7 @@ async function renderPieces() {
 
   piecesEl.innerHTML = '';
   if (!data || !data.length) {
-    piecesEl.innerHTML = '<div class="empty">Aún no hay piezas generadas. Escribe un nombre arriba y genera la primera.</div>';
+    piecesEl.innerHTML = '<div class="empty">Aún no hay piezas generadas.</div>';
     return;
   }
 
@@ -135,6 +138,10 @@ async function renderPieces() {
     info.innerHTML = `<div class="piece-name">${entry.name}</div><div class="piece-status ${entry.used ? 'used' : ''}">${entry.used ? 'Ya utilizada' : 'Disponible'}</div>`;
     card.appendChild(info);
 
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+
+    // Botón Descargar
     const dl = document.createElement('button');
     dl.className = 'btn small';
     dl.textContent = 'Descargar';
@@ -157,8 +164,35 @@ async function renderPieces() {
         }, 1000);
       }, 'image/png');
     };
-    card.appendChild(dl);
+    actions.appendChild(dl);
 
+    // Botón Eliminar
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn small btn-delete';
+    delBtn.textContent = 'Eliminar';
+    delBtn.onclick = async () => {
+      const confirmacion = confirm(`¿Seguro que deseas eliminar la pieza de "${entry.name}"?`);
+      if (!confirmacion) return;
+
+      delBtn.disabled = true;
+      delBtn.textContent = 'Borrando...';
+
+      const { error: delErr } = await supabaseClient
+        .from('pieces')
+        .delete()
+        .eq('token', entry.token);
+
+      if (delErr) {
+        alert('Error al eliminar: ' + delErr.message);
+        delBtn.disabled = false;
+        delBtn.textContent = 'Eliminar';
+      } else {
+        await renderPieces();
+      }
+    };
+    actions.appendChild(delBtn);
+
+    card.appendChild(actions);
     piecesEl.appendChild(card);
   });
 }
