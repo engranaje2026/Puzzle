@@ -6,12 +6,67 @@
 <title>Generador — Planilla Sinergia</title>
 <link rel="stylesheet" href="styles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  .empty { padding: 12px; color: #8a99ad; font-size: 14px; text-align: center; }
+  .piece-card {
+    background: #131b2e;
+    border: 1px solid #2a3656;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .piece-card.used { border-color: #3d4d75; }
+  .piece-name { font-weight: 700; color: #fff; font-size: 16px; }
+  .piece-status { font-size: 12px; color: #c6a15b; font-weight: 600; }
+  .piece-status.used { color: #888; }
+  .detail-box {
+    width: 100%;
+    box-sizing: border-box;
+    background: #0c1120;
+    border: 1px solid #232c42;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #8792a8;
+    text-align: left;
+  }
+  .feedback-input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 70px;
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: #070a12;
+    border: 1px solid #232c42;
+    color: #c9ced9;
+    font-family: inherit;
+    resize: vertical;
+  }
+  .actions { display: flex; gap: 8px; width: 100%; justify-content: center; }
+  .btn-delete { background: #5a2020; color: #ff8585; border: 1px solid #7a2828; }
+  .btn-delete:hover { background: #7a2828; }
+  
+  /* Contenedor invisible seguro para renderizar QRs */
+  #qrScratchpad {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+    visibility: hidden;
+  }
+</style>
 </head>
 <body>
+
+<div id="qrScratchpad"></div>
+
 <div class="wrap">
-  <div class="eyebrow">Solo para ti — no compartas esta URL</div>
+  <div class="eyebrow">Panel Administrativo</div>
   <h1>Generador de piezas</h1>
   <p class="sub">Genera una pieza por integrante. Descárgala y envíasela por su cuenta.</p>
 
@@ -22,112 +77,248 @@
   </div>
 
   <div class="section-title">Piezas generadas</div>
-  <div class="pieces" id="pieces"><div class="empty">Cargando piezas…</div></div>
+  <div class="pieces" id="pieces">
+    <div class="empty" id="statusMsg">Cargando piezas…</div>
+  </div>
 
   <footer><a class="plain" href="index.html">Ir a la página de verificación</a></footer>
 </div>
 
-<script src="config.js"></script>
-<script src="engine.js"></script>
 <script>
+const SUPABASE_URL = 'https://ngukwfgiyrsxloicixhx.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ndWt3ZmdpeXJzeGxvaWNpeGh4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY5NTQwMTcsImV4cCI6MjEwMjUzMDAxN30.rDnMh6dEPirrm8TVQLaii9Nunr1xVYD9jTQ8Z60MDBs';
+
+let supabaseClient = null;
 const piecesEl = document.getElementById('pieces');
 const nameInput = document.getElementById('nameInput');
 const genBtn = document.getElementById('genBtn');
+const scratchpad = document.getElementById('qrScratchpad');
 
-async function renderPieces(){
-  const tokens = await loadTokens();
-  piecesEl.innerHTML = '';
-  if(!tokens.length){
-    piecesEl.innerHTML = '<div class="empty">Aún no hay piezas generadas.</div>';
-    return;
-  }
-  tokens.forEach((entry, i)=>{
-    const card = document.createElement('div');
-    card.className = 'piece-card' + (entry.used ? ' used' : '');
-    const canvas = document.createElement('canvas');
-    drawGearPiece(canvas, entry.token, 'PIEZA #' + (i+1));
-    card.appendChild(canvas);
-
-    const name = document.createElement('div');
-    name.className = 'piece-name';
-    name.textContent = entry.name;
-    card.appendChild(name);
-
-    const status = document.createElement('div');
-    status.className = 'piece-status';
-    status.textContent = entry.used ? 'Ya utilizada' : 'Disponible';
-    card.appendChild(status);
-
-    if(entry.used){
-      const detail = document.createElement('div');
-      detail.style.textAlign = 'left';
-      detail.style.fontSize = '12px';
-      detail.style.color = '#8792a8';
-      detail.style.margin = '4px 0 10px';
-      detail.innerHTML =
-        '<div style="margin-bottom:4px;"><strong style="color:#c9ced9;">Cartera:</strong> ' + (entry.cartera || '—') + '</div>' +
-        '<div><strong style="color:#c9ced9;">Propuesta:</strong> ' + (entry.propuesta ? entry.propuesta.slice(0,140) + (entry.propuesta.length>140?'…':'') : '—') + '</div>';
-      card.appendChild(detail);
-
-      const fbTextarea = document.createElement('textarea');
-      fbTextarea.placeholder = 'Retroalimentación para ' + entry.name;
-      fbTextarea.value = entry.feedback || '';
-      fbTextarea.style.width = '100%';
-      fbTextarea.style.minHeight = '70px';
-      fbTextarea.style.fontSize = '12.5px';
-      fbTextarea.style.padding = '8px';
-      fbTextarea.style.borderRadius = '8px';
-      fbTextarea.style.background = '#070a12';
-      fbTextarea.style.border = '1px solid #232c42';
-      fbTextarea.style.color = '#c9ced9';
-      fbTextarea.style.marginBottom = '8px';
-      fbTextarea.style.resize = 'vertical';
-      card.appendChild(fbTextarea);
-
-      const fbBtn = document.createElement('button');
-      fbBtn.className = 'btn small';
-      fbBtn.textContent = 'Guardar retroalimentación';
-      fbBtn.onclick = async ()=>{
-        fbBtn.disabled = true;
-        fbBtn.textContent = 'Guardando…';
-        const { error } = await supabase
-          .from('pieces')
-          .update({ feedback: fbTextarea.value.trim(), feedback_date: new Date().toISOString() })
-          .eq('token', entry.token);
-        fbBtn.textContent = error ? 'Error — reintentar' : 'Guardado ✓';
-        fbBtn.disabled = false;
-      };
-      card.appendChild(fbBtn);
-    }
-
-    const dl = document.createElement('a');
-    dl.className = 'btn small';
-    dl.textContent = 'Descargar';
-    dl.href = '#';
-    dl.onclick = (e)=>{
-      e.preventDefault();
-      dl.href = canvas.toDataURL('image/png');
-      dl.download = entry.name.replace(/\s+/g,'-').toLowerCase() + '.png';
-      dl.click();
-    };
-    if(entry.used) dl.setAttribute('disabled','true');
-    card.appendChild(dl);
-
-    piecesEl.appendChild(card);
-  });
+try {
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (err) {
+  piecesEl.innerHTML = `<div style="color:#ff6b6b; padding:12px;">Error al conectar con Supabase: ${err.message}</div>`;
 }
 
-genBtn.addEventListener('click', async ()=>{
+function gearPath(cx, cy, rOuter, rInner, teeth) {
+  let d = '';
+  const step = (Math.PI * 2) / teeth;
+  for (let i = 0; i < teeth; i++) {
+    const a0 = i * step, a1 = a0 + step * 0.35, a2 = a0 + step * 0.5, a3 = a0 + step * 0.85;
+    const pts = [
+      [cx + rInner * Math.cos(a0), cy + rInner * Math.sin(a0)],
+      [cx + rOuter * Math.cos(a1), cy + rOuter * Math.sin(a1)],
+      [cx + rOuter * Math.cos(a2), cy + rOuter * Math.sin(a2)],
+      [cx + rInner * Math.cos(a3), cy + rInner * Math.sin(a3)],
+    ];
+    pts.forEach((p, j) => { d += (i === 0 && j === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1) + ' '; });
+  }
+  return d + 'Z';
+}
+
+function drawGearPiece(canvas, token, label) {
+  const ctx = canvas.getContext('2d');
+  canvas.width = 240; canvas.height = 260;
+  const cx = 120, cy = 110;
+  const path = new Path2D(gearPath(cx, cy, 96, 80, 14));
+  const grad = ctx.createLinearGradient(0, 0, 240, 220);
+  grad.addColorStop(0, '#1a2440'); grad.addColorStop(1, '#0c1120');
+  ctx.fillStyle = grad;
+  ctx.fill(path);
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = '#3a4568';
+  ctx.stroke(path);
+
+  // Render QR temporal
+  const tempDiv = document.createElement('div');
+  scratchpad.appendChild(tempDiv);
+  
+  try {
+    new QRCode(tempDiv, { 
+      text: token, 
+      width: 108, 
+      height: 108, 
+      colorDark: '#0c1120', 
+      colorLight: '#e9ebf1',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+
+    setTimeout(() => {
+      const qrCanvas = tempDiv.querySelector('canvas');
+      if (qrCanvas) {
+        const white = document.createElement('canvas');
+        white.width = 122; white.height = 122;
+        const wctx = white.getContext('2d');
+        wctx.fillStyle = '#eceef3';
+        wctx.fillRect(0, 0, 122, 122);
+        wctx.drawImage(qrCanvas, 7, 7, 108, 108);
+        ctx.drawImage(white, cx - 61, cy - 61, 122, 122);
+      }
+      ctx.fillStyle = '#c6a15b';
+      ctx.font = '600 11px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, cx, 245);
+      tempDiv.remove();
+    }, 60);
+  } catch(e) {
+    tempDiv.remove();
+  }
+}
+
+async function renderPieces() {
+  if (!supabaseClient) return;
+  piecesEl.innerHTML = '<div class="empty">Cargando piezas…</div>';
+  
+  try {
+    const { data, error } = await supabaseClient
+      .from('pieces')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      piecesEl.innerHTML = `<div style="color:#ff6b6b; padding:12px; text-align:center;">Error de consulta: ${error.message}</div>`;
+      return;
+    }
+
+    piecesEl.innerHTML = '';
+    if (!data || !data.length) {
+      piecesEl.innerHTML = '<div class="empty">Aún no hay piezas creadas. Escribe un nombre arriba y genera la primera.</div>';
+      return;
+    }
+
+    data.forEach((entry, i) => {
+      const card = document.createElement('div');
+      card.className = 'piece-card' + (entry.used ? ' used' : '');
+
+      const canvas = document.createElement('canvas');
+      drawGearPiece(canvas, entry.token, 'PIEZA #' + (i + 1));
+      card.appendChild(canvas);
+
+      const name = document.createElement('div');
+      name.className = 'piece-name';
+      name.textContent = entry.name;
+      card.appendChild(name);
+
+      const status = document.createElement('div');
+      status.className = 'piece-status' + (entry.used ? ' used' : '');
+      status.textContent = entry.used ? 'Ya utilizada' : 'Disponible';
+      card.appendChild(status);
+
+      if (entry.used) {
+        const detail = document.createElement('div');
+        detail.className = 'detail-box';
+        detail.innerHTML =
+          '<div style="margin-bottom:6px;"><strong style="color:#c6a15b;">Alias:</strong> ' + (entry.nickname || '—') + '</div>' +
+          '<div style="margin-bottom:6px;"><strong style="color:#c6a15b;">Cartera:</strong> ' + (entry.cartera || '—') + '</div>' +
+          '<div><strong style="color:#c6a15b;">Propuesta:</strong> ' + (entry.propuesta ? entry.propuesta : '—') + '</div>';
+        card.appendChild(detail);
+
+        const fbTextarea = document.createElement('textarea');
+        fbTextarea.className = 'feedback-input';
+        fbTextarea.placeholder = 'Escribe retroalimentación para ' + entry.name;
+        fbTextarea.value = entry.feedback || '';
+        card.appendChild(fbTextarea);
+
+        const fbBtn = document.createElement('button');
+        fbBtn.className = 'btn small';
+        fbBtn.textContent = 'Guardar retroalimentación';
+        fbBtn.onclick = async () => {
+          fbBtn.disabled = true;
+          fbBtn.textContent = 'Guardando…';
+          const { error: fbErr } = await supabaseClient
+            .from('pieces')
+            .update({
+              feedback: fbTextarea.value.trim(),
+              feedback_date: new Date().toISOString()
+            })
+            .eq('token', entry.token);
+
+          fbBtn.textContent = fbErr ? 'Error al guardar' : 'Guardado ✓';
+          setTimeout(() => {
+            fbBtn.disabled = false;
+            fbBtn.textContent = 'Guardar retroalimentación';
+          }, 2000);
+        };
+        card.appendChild(fbBtn);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+
+      const dl = document.createElement('button');
+      dl.className = 'btn small';
+      dl.textContent = 'Descargar';
+      dl.onclick = () => {
+        canvas.toBlob((blob) => {
+          const fileName = entry.name.replace(/\s+/g, '-').toLowerCase() + '.png';
+          if (!blob) {
+            window.open(canvas.toDataURL('image/png'), '_blank');
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 1000);
+        }, 'image/png');
+      };
+      actions.appendChild(dl);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn small btn-delete';
+      delBtn.textContent = 'Eliminar';
+      delBtn.onclick = async () => {
+        if (!confirm(`¿Eliminar la pieza de "${entry.name}"?`)) return;
+        delBtn.disabled = true;
+        delBtn.textContent = '...';
+
+        const { error: delErr } = await supabaseClient.from('pieces').delete().eq('token', entry.token);
+        if (delErr) {
+          alert('Error: ' + delErr.message);
+          delBtn.disabled = false;
+          delBtn.textContent = 'Eliminar';
+        } else {
+          await renderPieces();
+        }
+      };
+      actions.appendChild(delBtn);
+
+      card.appendChild(actions);
+      piecesEl.appendChild(card);
+    });
+
+  } catch (err) {
+    piecesEl.innerHTML = `<div style="color:#ff6b6b; padding:12px; text-align:center;">Fallo general: ${err.message}</div>`;
+  }
+}
+
+genBtn.addEventListener('click', async () => {
   const name = nameInput.value.trim();
-  if(!name) return;
+  if (!name) return alert('Escribe el nombre del integrante');
+  
   genBtn.disabled = true;
-  const token = 'PZ-' + crypto.randomUUID().slice(0,8).toUpperCase();
-  await insertPiece(name, token);
-  nameInput.value = '';
-  await renderPieces();
+  genBtn.textContent = 'Generando…';
+  
+  const token = 'PZ-' + Math.random().toString(36).substring(2, 9).toUpperCase();
+  const { error } = await supabaseClient.from('pieces').insert({ token, name });
+  
+  if (error) {
+    alert('Error al guardar en Supabase: ' + error.message);
+  } else {
+    nameInput.value = '';
+    await renderPieces();
+  }
+  
   genBtn.disabled = false;
+  genBtn.textContent = 'Generar pieza';
 });
 
+// Cargar piezas al iniciar
 renderPieces();
 </script>
 </body>
