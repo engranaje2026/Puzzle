@@ -3,146 +3,53 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Plan de Trabajo — Planilla Sinergia</title>
+<title>Acceso — Planilla Sinergia</title>
 <link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-  .card {
+  .drop {
+    border: 2px dashed #3a4568;
+    border-radius: 12px;
+    padding: 35px 20px;
+    text-align: center;
     background: #131b2e;
-    border: 1px solid #3a4568;
-    border-radius: 12px;
-    padding: 24px;
-    margin-top: 15px;
+    cursor: pointer;
+    margin: 20px 0;
   }
-  .feedback-box {
-    background: #1a2744;
-    border-left: 4px solid #c6a15b;
+  .result {
+    display: none;
     padding: 16px;
-    border-radius: 6px;
-    margin-bottom: 20px;
+    border-radius: 8px;
+    margin-top: 20px;
+    text-align: center;
   }
-  .feedback-title {
-    color: #c6a15b;
-    font-weight: 700;
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
-  }
-  .feedback-body {
-    color: #e0e0e0;
-    font-size: 14px;
-    line-height: 1.5;
-  }
-  .feedback-meta {
-    font-size: 11px;
-    color: #8a99ad;
-    margin-top: 8px;
-  }
-  .field {
-    margin-bottom: 16px;
-  }
-  .field label {
-    display: block;
-    font-size: 13px;
-    font-weight: 600;
-    color: #c6a15b;
-    margin-bottom: 6px;
-  }
-  .field input, .field select, .field textarea {
-    width: 100%;
-    box-sizing: border-box;
-    background: #0c1120;
-    border: 1px solid #3a4568;
-    color: #fff;
-    padding: 10px 12px;
-    border-radius: 6px;
-    font-family: inherit;
-    font-size: 14px;
-  }
-  .field textarea {
-    resize: vertical;
-    min-height: 130px;
-    line-height: 1.5;
-  }
-  .field select option {
-    background: #0c1120;
-    color: #fff;
-  }
-  .status-tag {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 10px;
-  }
-  .status-saved { background: #142918; color: #51cf66; border: 1px solid #205a28; }
+  .result.show { display: block; }
+  .result.ok { background: #142918; border: 1px solid #205a28; color: #51cf66; }
+  .result.err { background: #2a1515; border: 1px solid #5a2020; color: #ff6b6b; }
+  .result.loading { background: #1a2440; border: 1px solid #3a4568; color: #c6a15b; }
+  .result h2 { margin: 0 0 8px; font-size: 18px; color: inherit; }
+  .result p { margin: 0; font-size: 14px; color: #ddd; }
 </style>
 </head>
 <body>
-<div class="wrap" id="mainWrap" style="display:none;">
+<div class="wrap">
   <div class="eyebrow">Planilla Sinergia</div>
-  <h1 id="welcomeUser">Propuesta de Integrante</h1>
-  <p class="sub">Selecciona tu área de interés y describe tu proyecto o plan de trabajo.</p>
+  <h1>Sube tu pieza</h1>
+  <p class="sub">Cada integrante recibió una pieza única. Súbela aquí para entrar al espacio del equipo.</p>
 
-  <!-- Tarjeta de Retroalimentación del Administrador -->
-  <div id="feedbackContainer" style="display:none;" class="feedback-box">
-    <div class="feedback-title">Retroalimentación del Administrador</div>
-    <div class="feedback-body" id="feedbackText"></div>
-    <div class="feedback-meta" id="feedbackDate"></div>
+  <div class="drop" id="drop">
+    <p class="big" style="font-weight:600; color:#fff; margin:0 0 6px;">Toca aquí para seleccionar tu pieza</p>
+    <p style="color:#8a99ad; margin:0; font-size:13px;">Formatos: PNG o JPG</p>
+    <input type="file" id="fileInput" accept="image/*" style="display:none;">
   </div>
 
-  <div class="card">
-    <div class="field">
-      <label for="nicknameInput">Nombre visible / Alias preferido</label>
-      <input type="text" id="nicknameInput" placeholder="Ej. Yrak E.">
-    </div>
-
-    <div class="field">
-      <label for="carteraSelect">Cartera de tu interés</label>
-      <select id="carteraSelect">
-        <option value="" disabled selected>Selecciona una cartera o comisión...</option>
-        <optgroup label="Secretaría General">
-          <option value="Secretaría General">Secretaría General</option>
-        </optgroup>
-        <optgroup label="Secretarías Operativas">
-          <option value="Secretaría de Trabajo (Titular)">Secretaría de Trabajo (Titular)</option>
-          <option value="Secretaría de Trabajo (Suplente)">Secretaría de Trabajo (Suplente)</option>
-          <option value="Secretaría de Previsión Social (Titular)">Secretaría de Previsión Social (Titular)</option>
-          <option value="Secretaría de Previsión Social (Suplente)">Secretaría de Previsión Social (Suplente)</option>
-          <option value="Secretaría de Organización (Titular)">Secretaría de Organización (Titular)</option>
-          <option value="Secretaría de Organización (Suplente)">Secretaría de Organización (Suplente)</option>
-          <option value="Secretaría de Finanzas (Titular)">Secretaría de Finanzas (Titular)</option>
-          <option value="Secretaría de Finanzas (Suplente)">Secretaría de Finanzas (Suplente)</option>
-          <option value="Secretaría de Relaciones (Titular)">Secretaría de Relaciones (Titular)</option>
-          <option value="Secretaría de Relaciones (Suplente)">Secretaría de Relaciones (Suplente)</option>
-          <option value="Secretaría del Interior (Titular)">Secretaría del Interior (Titular)</option>
-          <option value="Secretaría del Interior (Suplente)">Secretaría del Interior (Suplente)</option>
-        </optgroup>
-        <optgroup label="Comisión de Justicia">
-          <option value="Comisión de Justicia (Presidente)">Comisión de Justicia (Presidente)</option>
-          <option value="Comisión de Justicia (Suplente Presidente)">Comisión de Justicia (Suplente Presidente)</option>
-          <option value="Comisión de Justicia (Secretario)">Comisión de Justicia (Secretario)</option>
-          <option value="Comisión de Justicia (Vocal 1)">Comisión de Justicia (Vocal 1)</option>
-          <option value="Comisión de Justicia (Vocal 2)">Comisión de Justicia (Vocal 2)</option>
-          <option value="Comisión de Justicia (Vocal 3)">Comisión de Justicia (Vocal 3)</option>
-          <option value="Comisión de Justicia (Suplente Vocal 1)">Comisión de Justicia (Suplente Vocal 1)</option>
-          <option value="Comisión de Justicia (Suplente Vocal 2)">Comisión de Justicia (Suplente Vocal 2)</option>
-          <option value="Comisión de Justicia (Suplente Vocal 3)">Comisión de Justicia (Suplente Vocal 3)</option>
-        </optgroup>
-      </select>
-    </div>
-
-    <div class="field">
-      <label for="propuestaInput">Desarrollo de tu propuesta / Plan de trabajo</label>
-      <textarea id="propuestaInput" placeholder="Detalla aquí tus objetivos, aportes y plan estratégico para esta área..."></textarea>
-    </div>
-
-    <button class="btn primary" id="saveBtn" style="width:100%;">Guardar Propuesta</button>
+  <div class="result" id="result">
+    <h2 id="resultTitle"></h2>
+    <p id="resultBody"></p>
   </div>
 
-  <footer><a class="plain" href="index.html">Salir / Volver a escanear</a></footer>
+  <footer>Cada pieza es válida una sola vez.</footer>
 </div>
 
 <script>
@@ -151,92 +58,109 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const isAuth = sessionStorage.getItem('sinergia_auth');
-const userToken = sessionStorage.getItem('sinergia_token');
-const userName = sessionStorage.getItem('sinergia_user');
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
 
-const mainWrap = document.getElementById('mainWrap');
-const welcomeUser = document.getElementById('welcomeUser');
-const nicknameInput = document.getElementById('nicknameInput');
-const carteraSelect = document.getElementById('carteraSelect');
-const propuestaInput = document.getElementById('propuestaInput');
-const saveBtn = document.getElementById('saveBtn');
+drop.addEventListener('click', () => fileInput.click());
 
-const feedbackContainer = document.getElementById('feedbackContainer');
-const feedbackText = document.getElementById('feedbackText');
-const feedbackDate = document.getElementById('feedbackDate');
-
-async function init() {
-  if (!isAuth || !userToken) {
-    alert('Acceso no autorizado. Escanea tu pieza para ingresar.');
-    window.location.replace('index.html');
-    return;
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files && e.target.files.length > 0) {
+    handleUploadedFile(e.target.files[0]);
   }
+});
 
-  mainWrap.style.display = 'block';
-  welcomeUser.textContent = `Hola, ${userName}`;
-
-  // Consultar datos actuales del integrante
-  const { data, error } = await supabaseClient
-    .from('pieces')
-    .select('*')
-    .eq('token', userToken)
-    .maybeSingle();
-
-  if (error || !data) {
-    console.error('Error al recuperar datos:', error);
-    return;
-  }
-
-  if (data.nickname) nicknameInput.value = data.nickname;
-  if (data.cartera) carteraSelect.value = data.cartera;
-  if (data.propuesta) propuestaInput.value = data.propuesta;
-
-  // Si existe retroalimentación, mostrarla
-  if (data.feedback && data.feedback.trim() !== '') {
-    feedbackText.textContent = data.feedback;
-    if (data.feedback_date) {
-      const fDate = new Date(data.feedback_date);
-      feedbackDate.textContent = `Actualizado el ${fDate.toLocaleDateString()} a las ${fDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-    }
-    feedbackContainer.style.display = 'block';
-  }
+function showResult(type, title, body) {
+  const box = document.getElementById('result');
+  box.className = 'result show ' + type;
+  document.getElementById('resultTitle').textContent = title;
+  document.getElementById('resultBody').textContent = body;
 }
 
-saveBtn.onclick = async () => {
-  const nickname = nicknameInput.value.trim();
-  const cartera = carteraSelect.value;
-  const propuesta = propuestaInput.value.trim();
+function handleUploadedFile(file) {
+  showResult('loading', 'Analizando pieza...', 'Leyendo el código QR embebido en la imagen.');
+  
+  const img = new Image();
+  const reader = new FileReader();
 
-  if (!cartera) {
-    alert('Por favor selecciona la cartera de tu interés.');
-    return;
+  reader.onload = (e) => {
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imgData.data, canvas.width, canvas.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code && code.data) {
+          validateToken(code.data.trim());
+        } else {
+          showResult('err', 'No se pudo leer la pieza', 'Asegúrate de subir la imagen original PNG descargada del generador.');
+        }
+      } catch (err) {
+        showResult('err', 'Error al procesar', 'No se pudo decodificar el archivo.');
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function validateToken(token) {
+  showResult('loading', 'Validando con el servidor...', 'Verificando autenticidad del folio.');
+
+  try {
+    // 1. Intentar canje atómico
+    const { data, error } = await supabaseClient
+      .from('pieces')
+      .update({ used: true, used_at: new Date().toISOString() })
+      .eq('token', token)
+      .eq('used', false)
+      .select();
+
+    if (error) {
+      showResult('err', 'Error de conexión', error.message);
+      return;
+    }
+
+    let memberName = '';
+
+    if (data && data.length > 0) {
+      memberName = data[0].name;
+    } else {
+      // 2. Si ya estaba canjeada, verificar si existe para permitirle reingreso a ver o editar
+      const { data: existing } = await supabaseClient
+        .from('pieces')
+        .select('*')
+        .eq('token', token)
+        .maybeSingle();
+
+      if (!existing) {
+        showResult('err', 'Pieza no reconocida', 'El código de esta pieza no está registrado en el sistema.');
+        return;
+      }
+      memberName = existing.name;
+    }
+
+    // Guardar sesión y token único
+    sessionStorage.setItem('sinergia_auth', 'true');
+    sessionStorage.setItem('sinergia_user', memberName);
+    sessionStorage.setItem('sinergia_token', token);
+
+    showResult('ok', '¡Bienvenido/a, ' + memberName + '!', 'Acceso concedido. Abriendo tu panel...');
+    
+    setTimeout(() => {
+      window.location.href = 'propuesta.html';
+    }, 1000);
+
+  } catch (err) {
+    showResult('err', 'Error de red', 'No se pudo completar la verificación.');
   }
-
-  saveBtn.disabled = true;
-  saveBtn.textContent = 'Guardando...';
-
-  const { error } = await supabaseClient
-    .from('pieces')
-    .update({
-      nickname: nickname || userName,
-      cartera: cartera,
-      propuesta: propuesta,
-      updated_at: new Date().toISOString()
-    })
-    .eq('token', userToken);
-
-  if (error) {
-    alert('Error al guardar: ' + error.message);
-  } else {
-    alert('¡Propuesta guardada correctamente!');
-  }
-
-  saveBtn.disabled = false;
-  saveBtn.textContent = 'Guardar Propuesta';
-};
-
-init();
+}
 </script>
 </body>
 </html>
