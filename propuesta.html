@@ -3,36 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Plan de Trabajo — Planilla Sinergia</title>
+<title>Propuesta — Planilla Sinergia</title>
 <link rel="stylesheet" href="styles.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   .card {
     background: #131b2e;
     border: 1px solid #3a4568;
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 24px;
-    margin-top: 15px;
+    margin-top: 16px;
   }
   .feedback-box {
-    background: #1a2744;
-    border-left: 4px solid #c6a15b;
-    padding: 16px;
-    border-radius: 6px;
-    margin-bottom: 20px;
+    background: #141d33;
+    border-left: 3px solid #c6a15b;
+    padding: 16px 18px;
+    border-radius: 8px;
+    margin-bottom: 24px;
   }
   .feedback-title {
     color: #c6a15b;
-    font-weight: 700;
-    font-size: 14px;
+    font-weight: 600;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: .14em;
     margin-bottom: 6px;
   }
   .feedback-body {
-    color: #e0e0e0;
-    font-size: 14px;
-    line-height: 1.5;
+    color: #dfe2ea;
+    font-size: 13.5px;
+    line-height: 1.6;
   }
   .feedback-meta {
     font-size: 11px;
@@ -40,11 +40,11 @@
     margin-top: 8px;
   }
   .field {
-    margin-bottom: 16px;
+    margin-bottom: 18px;
   }
   .field label {
     display: block;
-    font-size: 13px;
+    font-size: 12.5px;
     font-weight: 600;
     color: #c6a15b;
     margin-bottom: 6px;
@@ -56,9 +56,13 @@
     border: 1px solid #3a4568;
     color: #fff;
     padding: 10px 12px;
-    border-radius: 6px;
+    border-radius: 8px;
     font-family: inherit;
-    font-size: 14px;
+    font-size: 13.5px;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none;
+    border-color: #c6a15b;
   }
   .field textarea {
     resize: vertical;
@@ -69,24 +73,22 @@
     background: #0c1120;
     color: #fff;
   }
-  .status-tag {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 10px;
+  .save-status {
+    font-size: 13px;
+    margin-top: 12px;
+    min-height: 1.2em;
+    text-align: center;
   }
-  .status-saved { background: #142918; color: #51cf66; border: 1px solid #205a28; }
+  .save-status.ok { color: #51cf66; }
+  .save-status.err { color: #ff6b6b; }
 </style>
 </head>
 <body>
 <div class="wrap" id="mainWrap" style="display:none;">
   <div class="eyebrow">Planilla Sinergia</div>
-  <h1 id="welcomeUser">Propuesta de Integrante</h1>
-  <p class="sub">Selecciona tu área de interés y describe tu proyecto o plan de trabajo.</p>
+  <h1 id="welcomeUser">Tu propuesta</h1>
+  <p class="sub">Selecciona tu cartera de interés y describe tu plan de trabajo. Puedes volver a editarlo cuando quieras.</p>
 
-  <!-- Tarjeta de Retroalimentación del Administrador -->
   <div id="feedbackContainer" style="display:none;" class="feedback-box">
     <div class="feedback-title">Retroalimentación del Administrador</div>
     <div class="feedback-body" id="feedbackText"></div>
@@ -102,7 +104,7 @@
     <div class="field">
       <label for="carteraSelect">Cartera de tu interés</label>
       <select id="carteraSelect">
-        <option value="" disabled selected>Selecciona una cartera o comisión...</option>
+        <option value="" disabled selected>Selecciona una cartera o comisión…</option>
         <optgroup label="Secretaría General">
           <option value="Secretaría General">Secretaría General</option>
         </optgroup>
@@ -136,10 +138,11 @@
 
     <div class="field">
       <label for="propuestaInput">Desarrollo de tu propuesta / Plan de trabajo</label>
-      <textarea id="propuestaInput" placeholder="Detalla aquí tus objetivos, aportes y plan estratégico para esta área..."></textarea>
+      <textarea id="propuestaInput" placeholder="Detalla aquí tus objetivos, aportes y plan estratégico para esta área…"></textarea>
     </div>
 
-    <button class="btn primary" id="saveBtn" style="width:100%;">Guardar Propuesta</button>
+    <button class="btn primary" id="saveBtn" style="width:100%;">Guardar propuesta</button>
+    <div class="save-status" id="saveStatus"></div>
   </div>
 
   <footer><a class="plain" href="index.html">Salir / Volver a escanear</a></footer>
@@ -161,6 +164,7 @@ const nicknameInput = document.getElementById('nicknameInput');
 const carteraSelect = document.getElementById('carteraSelect');
 const propuestaInput = document.getElementById('propuestaInput');
 const saveBtn = document.getElementById('saveBtn');
+const saveStatus = document.getElementById('saveStatus');
 
 const feedbackContainer = document.getElementById('feedbackContainer');
 const feedbackText = document.getElementById('feedbackText');
@@ -174,9 +178,8 @@ async function init() {
   }
 
   mainWrap.style.display = 'block';
-  welcomeUser.textContent = `Hola, ${userName}`;
+  welcomeUser.textContent = 'Hola, ' + userName;
 
-  // Consultar datos actuales del integrante
   const { data, error } = await supabaseClient
     .from('pieces')
     .select('*')
@@ -185,6 +188,8 @@ async function init() {
 
   if (error || !data) {
     console.error('Error al recuperar datos:', error);
+    saveStatus.textContent = 'No se pudo cargar la información previa.';
+    saveStatus.className = 'save-status err';
     return;
   }
 
@@ -192,12 +197,11 @@ async function init() {
   if (data.cartera) carteraSelect.value = data.cartera;
   if (data.propuesta) propuestaInput.value = data.propuesta;
 
-  // Si existe retroalimentación, mostrarla
   if (data.feedback && data.feedback.trim() !== '') {
     feedbackText.textContent = data.feedback;
     if (data.feedback_date) {
       const fDate = new Date(data.feedback_date);
-      feedbackDate.textContent = `Actualizado el ${fDate.toLocaleDateString()} a las ${fDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+      feedbackDate.textContent = 'Actualizado el ' + fDate.toLocaleDateString() + ' a las ' + fDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     }
     feedbackContainer.style.display = 'block';
   }
@@ -209,12 +213,15 @@ saveBtn.onclick = async () => {
   const propuesta = propuestaInput.value.trim();
 
   if (!cartera) {
-    alert('Por favor selecciona la cartera de tu interés.');
+    saveStatus.textContent = 'Selecciona la cartera de tu interés.';
+    saveStatus.className = 'save-status err';
     return;
   }
 
   saveBtn.disabled = true;
-  saveBtn.textContent = 'Guardando...';
+  saveBtn.textContent = 'Guardando…';
+  saveStatus.textContent = '';
+  saveStatus.className = 'save-status';
 
   const { error } = await supabaseClient
     .from('pieces')
@@ -227,13 +234,15 @@ saveBtn.onclick = async () => {
     .eq('token', userToken);
 
   if (error) {
-    alert('Error al guardar: ' + error.message);
+    saveStatus.textContent = 'Error al guardar: ' + error.message;
+    saveStatus.className = 'save-status err';
   } else {
-    alert('¡Propuesta guardada correctamente!');
+    saveStatus.textContent = '✓ Propuesta guardada correctamente.';
+    saveStatus.className = 'save-status ok';
   }
 
   saveBtn.disabled = false;
-  saveBtn.textContent = 'Guardar Propuesta';
+  saveBtn.textContent = 'Guardar propuesta';
 };
 
 init();
